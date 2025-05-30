@@ -32,7 +32,7 @@ export default function GitHubPagesGrid() {
 
   useEffect(() => {
     fetchGitHubPages()
-  }, [username])
+  }, [])
 
   useEffect(() => {
     const filtered = repos.filter(
@@ -50,9 +50,29 @@ export default function GitHubPagesGrid() {
     setError(null)
 
     try {
-      const response = await fetch(`https://api.github.com/users/${username}/repos?per_page=100`)
+      const headers: HeadersInit = {}
+      const token = process.env.NEXT_PUBLIC_GITHUB_TOKEN
+
+      if (token && token.trim()) {
+        headers["Authorization"] = `token ${token.trim()}`
+      } else {
+        console.warn("NEXT_PUBLIC_GITHUB_TOKEN not found. Making unauthenticated request.")
+      }
+
+      const response = await fetch(`https://api.github.com/users/${username}/repos?per_page=100`, { headers })
 
       if (!response.ok) {
+        if (response.status === 403) {
+          if (token && token.trim()) {
+            throw new Error(
+              `Failed to fetch repositories: ${response.status}. This might be due to an invalid or expired GitHub token, or insufficient permissions. Please check your NEXT_PUBLIC_GITHUB_TOKEN.`,
+            )
+          } else {
+            throw new Error(
+              `Failed to fetch repositories: ${response.status}. This is likely due to rate limiting. Please set NEXT_PUBLIC_GITHUB_TOKEN in your .env.local file to increase the rate limit.`,
+            )
+          }
+        }
         throw new Error(`Failed to fetch repositories: ${response.status}`)
       }
 
@@ -102,6 +122,11 @@ export default function GitHubPagesGrid() {
               placeholder="Enter GitHub username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  fetchGitHubPages()
+                }
+              }}
               className="sm:max-w-xs"
             />
             <Button onClick={fetchGitHubPages} disabled={loading}>
@@ -123,7 +148,7 @@ export default function GitHubPagesGrid() {
           <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 mb-6">
             <p className="text-destructive font-medium">Error: {error}</p>
             <p className="text-sm text-muted-foreground mt-1">
-              Make sure the username is correct and the profile is public.
+              Make sure the username is correct and the profile is public. If you are seeing persistent 403 errors, ensure your <code>NEXT_PUBLIC_GITHUB_TOKEN</code> is correctly set in a <code>.env.local</code> file and your development server has been restarted.
             </p>
           </div>
         )}
